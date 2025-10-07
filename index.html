@@ -9,7 +9,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
-    <!-- Google Identity Services and Google API client for Photos -->
     <script src="https://accounts.google.com/gsi/client" async defer onload="onGsiLoaded()"></script>
     <script src="https://apis.google.com/js/api.js" async defer onload="onGapiLoaded()"></script>
     <style>
@@ -54,6 +53,7 @@
         /* Card Stack effect */
         .card:nth-child(2) { transform: translateY(-10px) scale(0.95); z-index: -1; }
         .card:nth-child(3) { transform: translateY(-20px) scale(0.90); z-index: -2; }
+        
         .card-overlay {
             width: 100%;
             padding: 1rem 1.5rem;
@@ -95,7 +95,7 @@
             font-size: 2rem;
             color: white;
             cursor: pointer;
-            transition: all 0.2s cubic-bezier(.21,1.5,.74,1.25);
+            transition: all 0.2s cubic-bezier(.21,1.5,.74,1.25); /* bouncy transition */
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5), inset 0 2px 2px rgba(255,255,255,0.2);
             border: 2px solid rgba(255,255,255,0.2);
         }
@@ -110,7 +110,8 @@
         #nope-btn:hover { box-shadow: 0 0 25px var(--glow-color-nope); }
         #like-btn { background-color: #22c55e; }
         #like-btn:hover { box-shadow: 0 0 25px var(--glow-color-like); }
-        /* Modal styling */
+
+        /* Glowing and Bouncy Modal */
         .modal {
             transition: opacity 0.3s ease-in-out, transform 0.3s cubic-bezier(.21,1.5,.74,1.25);
         }
@@ -123,6 +124,7 @@
             box-shadow: 0 0 30px var(--glow-color-action);
             border: 1px solid var(--glow-color-action);
         }
+        
         /* Loading Spinner */
         .loader {
             border: 4px solid rgba(255, 255, 255, 0.2);
@@ -137,7 +139,9 @@
         }
     </style>
 </head>
+
 <body class="flex flex-col items-center justify-center min-h-screen p-4 overflow-hidden">
+
     <!-- Header -->
     <header class="w-full max-w-md flex justify-between items-center absolute top-0 p-4 z-10">
         <h1 class="text-2xl font-bold text-white tracking-tight" style="text-shadow: 0 0 10px var(--glow-color-action);">Photo Tinder</h1>
@@ -150,14 +154,18 @@
             </button>
         </div>
     </header>
+
     <!-- Loading State -->
     <div id="loading-view" class="flex flex-col items-center justify-center space-y-4">
         <div class="loader"></div>
-        <p class="text-gray-400">Melde dich an &amp; lade Bilder...</p>
+        <p class="text-gray-400">Melde dich an & lade Bilder...</p>
     </div>
+
     <!-- Main App View -->
     <main id="app-view" class="hidden flex flex-col items-center justify-center flex-grow">
-        <div id="card-stack" class="card-container"></div>
+        <div id="card-stack" class="card-container">
+            <!-- Cards will be injected here by JS -->
+        </div>
         <div id="no-more-photos" class="hidden text-center p-8 bg-gray-800 rounded-2xl">
             <h2 class="text-2xl font-bold mb-2">Alles gesehen!</h2>
             <p class="text-gray-400">Du hast alle verfügbaren Bilder bewertet. Schau später wieder vorbei!</p>
@@ -167,10 +175,12 @@
             <button id="like-btn" class="action-button"><i class="fas fa-heart"></i></button>
         </div>
     </main>
+
     <!-- Footer with User ID -->
     <footer class="w-full text-center p-4 absolute bottom-0">
         <p id="user-info" class="text-xs text-gray-500"></p>
     </footer>
+
     <!-- Modals -->
     <div id="modal-container">
         <!-- Rankings Modal -->
@@ -192,6 +202,7 @@
                 </div>
             </div>
         </div>
+
         <!-- Admin Modal -->
         <div id="admin-modal" class="hidden modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
             <div class="modal-content bg-gray-800 rounded-2xl p-6 w-full max-w-md">
@@ -202,7 +213,7 @@
                 <div id="admin-content" class="space-y-4">
                     <p class="text-gray-400 text-sm">Synchronisiere Bilder aus einem Google Photos Album, dem du beigetreten bist.</p>
                     <div id="google-auth-ui">
-                        <button id="google-signin-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-all duration-200">
+                         <button id="google-signin-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-all duration-200">
                             <i class="fab fa-google"></i> Mit Google anmelden
                         </button>
                     </div>
@@ -212,7 +223,7 @@
                         <button id="sync-photos-btn" class="w-full mt-2 bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200">
                             Bilder Synchronisieren
                         </button>
-                        <button id="google-signout-btn" class="w-full mt-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200">
+                         <button id="google-signout-btn" class="w-full mt-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200">
                             Abmelden
                         </button>
                     </div>
@@ -221,26 +232,33 @@
             </div>
         </div>
     </div>
+
+
     <script type="module">
         // Import Firebase modules
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, collection, doc, getDocs, onSnapshot, 
-            runTransaction, query, where, addDoc, setDoc
+            runTransaction, query, where, limit, orderBy, addDoc, setDoc
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
         // --- Konfiguration ---
-        // These globals (__firebase_config, __app_id, __initial_auth_token) will be injected via build/deployment scripts.
         const firebaseConfig = typeof __firebase_config !== 'undefined' 
             ? JSON.parse(__firebase_config) 
             : { apiKey: "dummy-key", authDomain: "dummy.firebaseapp.com", projectId: "dummy-project" };
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const GOOGLE_CLIENT_ID = typeof __google_client_id !== 'undefined' ? __google_client_id : "your-google-client-id.apps.googleusercontent.com";
+        
+        // --- Google API Konfiguration ---
+        const GOOGLE_API_KEY = "AIzaSyBstYQNtCxQo2po0cl5Lm4IMSFJwwp97lk";
+        const GOOGLE_CLIENT_ID = "837803783927-eq876vb8gpt0qgu28qdqtur5bl6qtag9.apps.googleusercontent.com";
         const GOOGLE_API_SCOPES = 'https://www.googleapis.com/auth/photoslibrary.readonly';
+        
         // --- App Initialisierung ---
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+
         // --- DOM-Elemente ---
         const loadingView = document.getElementById('loading-view');
         const appView = document.getElementById('app-view');
@@ -265,32 +283,35 @@
         const googleUserInfo = document.getElementById('google-user-info');
         const albumTitleInput = document.getElementById('album-title-input');
         const syncPhotosBtn = document.getElementById('sync-photos-btn');
+
         // --- App-Status ---
         let currentUser = null;
         let currentCard = null;
         let photos = [];
         let votedPhotoIds = new Set();
         let isDragging = false;
-        let startX = 0; 
-        let offsetX = 0;
+        let startX = 0; let offsetX = 0;
         let gapiInited = false;
         let gsiInited = false;
         let googleTokenClient;
+
         // --- Collection Paths ---
         const photosPath = `artifacts/${appId}/public/data/photos`;
         const usersPath = `artifacts/${appId}/public/data/users`;
         const votesPath = `artifacts/${appId}/public/data/votes`;
+        
         // --- API Ready Check ---
         function checkApisReadyAndInitAdminUI() {
             if (gapiInited && gsiInited) {
                 updateAdminUI(false);
             }
         }
+
         // --- Google API Integration ---
         window.onGapiLoaded = () => {
             gapi.load('client', () => {
                 gapi.client.init({
-                    apiKey: firebaseConfig.apiKey,
+                    apiKey: GOOGLE_API_KEY, // Use the dedicated API Key
                     discoveryDocs: ['https://photoslibrary.googleapis.com/$discovery/rest?version=v1'],
                 }).then(() => { 
                     gapiInited = true;
@@ -298,6 +319,7 @@
                 });
             });
         };
+
         window.onGsiLoaded = () => {
             googleTokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: GOOGLE_CLIENT_ID,
@@ -312,61 +334,64 @@
             gsiInited = true;
             checkApisReadyAndInitAdminUI();
         };
+
         // --- Hauptlogik (Firebase Auth) ---
-        async function main() {
-            try {
-                // Wait for the auth state to be ready first. This prevents race conditions.
-                await auth.authStateReady();
-                let user = auth.currentUser;
-                // If no user is found after the state is ready, we need to sign them in.
-                if (!user) {
-                    let userCredential;
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        userCredential = await signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        userCredential = await signInAnonymously(auth);
-                    }
-                    user = userCredential.user;
-                }
-                // If we have a user, proceed with app initialization.
-                if (user) {
-                    if (currentUser) return; // Avoid re-initializing
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // User is signed in, initialize the app if not already done.
+                if (!currentUser) {
                     currentUser = user;
                     userInfo.textContent = `UserID: ${user.uid}`;
                     loadingView.classList.add('hidden');
                     appView.classList.remove('hidden');
                     initializeAppLogic();
-                } else {
-                    throw new Error("Could not authenticate user.");
                 }
-                // After initialization, listen for any future auth state changes (e.g., sign-out).
-                onAuthStateChanged(auth, (user) => {
-                    if (!user) {
-                        console.log("User signed out, reloading...");
-                        currentUser = null;
-                        location.reload();
+            } else {
+                // No user, attempt to sign in. This will trigger the listener again on success.
+                (async () => {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Custom token sign-in failed, falling back to anonymous:", error);
+                        try {
+                           // Fallback to anonymous sign-in if the custom token fails.
+                           await signInAnonymously(auth);
+                        } catch (anonError) {
+                            console.error("Anonymous sign-in also failed:", anonError);
+                            loadingView.innerHTML = '<p class="text-red-400">Anmeldung fehlgeschlagen.</p>';
+                        }
                     }
-                });
-            } catch (error) {
-                console.error("Authentication failed during startup:", error);
-                loadingView.innerHTML = '<p class="text-red-400">Anmeldung fehlgeschlagen. App kann nicht gestartet werden.</p>';
+                })();
             }
-        }
-        main();
+        });
+
+
         async function initializeAppLogic() {
             await loadVotedPhotos();
             listenForPhotos();
         }
+        
         async function loadVotedPhotos() {
             if (!currentUser) return;
-            const votesQuery = query(collection(db, votesPath), where('userId', '==', currentUser.uid));
+            // Fetch all votes and filter client-side to avoid needing a Firestore index.
+            const votesQuery = query(collection(db, votesPath));
             try {
                 const querySnapshot = await getDocs(votesQuery);
-                querySnapshot.forEach(doc => votedPhotoIds.add(doc.data().photoId));
+                querySnapshot.forEach(doc => {
+                    const voteData = doc.data();
+                    if (voteData.userId === currentUser.uid) {
+                        votedPhotoIds.add(voteData.photoId);
+                    }
+                });
             } catch (error) {
                 console.error("Error loading voted photos:", error);
             }
         }
+
         function listenForPhotos() {
             const photosQuery = query(collection(db, photosPath));
             onSnapshot(photosQuery, (snapshot) => {
@@ -376,12 +401,13 @@
                         newPhotos.push({ id: doc.id, ...doc.data() });
                     }
                 });
-                photos = newPhotos.sort(() => Math.random() - 0.5);
+                photos = newPhotos.sort(() => Math.random() - 0.5); // Randomize order
                 renderCards();
             }, (error) => {
                 console.error("Error listening for photos:", error);
             });
         }
+        
         function renderCards() {
             cardStack.innerHTML = '';
             if (photos.length > 0) {
@@ -396,11 +422,13 @@
                 currentCard = null;
             }
         }
+
         function createCard(photo) {
             const cardEl = document.createElement('div');
             cardEl.className = 'card';
             cardEl.style.backgroundImage = `url('${photo.url}')`;
             cardEl.dataset.id = photo.id;
+            
             const overlay = document.createElement('div');
             overlay.className = 'card-overlay';
             const likeIndicator = document.createElement('div');
@@ -409,9 +437,11 @@
             const nopeIndicator = document.createElement('div');
             nopeIndicator.className = 'vote-indicator nope-indicator';
             nopeIndicator.textContent = 'NOPE';
+            
             cardEl.append(overlay, likeIndicator, nopeIndicator);
             cardStack.appendChild(cardEl);
         }
+        
         function addCardEventListeners(card) {
             card.addEventListener('mousedown', startDrag);
             card.addEventListener('touchstart', startDrag, { passive: true });
@@ -420,18 +450,21 @@
             window.addEventListener('mouseup', endDrag);
             window.addEventListener('touchend', endDrag);
         }
+
         function removeCardEventListeners() {
-            window.removeEventListener('mousemove', drag);
-            window.removeEventListener('touchmove', drag);
-            window.removeEventListener('mouseup', endDrag);
-            window.removeEventListener('touchend', endDrag);
+             window.removeEventListener('mousemove', drag);
+             window.removeEventListener('touchmove', drag);
+             window.removeEventListener('mouseup', endDrag);
+             window.removeEventListener('touchend', endDrag);
         }
+
         function startDrag(e) {
             if (!currentCard) return;
             isDragging = true;
             currentCard.classList.add('dragging');
             startX = e.pageX || e.touches[0].pageX;
         }
+
         function drag(e) {
             if (!isDragging || !currentCard) return;
             e.preventDefault();
@@ -439,9 +472,11 @@
             offsetX = currentX - startX;
             const rotation = offsetX * 0.1;
             currentCard.style.transform = `translateX(${offsetX}px) rotate(${rotation}deg)`;
+            
             const likeIndicator = currentCard.querySelector('.like-indicator');
             const nopeIndicator = currentCard.querySelector('.nope-indicator');
             const opacity = Math.min(Math.abs(offsetX) / 100, 1);
+
             if (offsetX > 10) {
                 likeIndicator.style.opacity = opacity;
                 nopeIndicator.style.opacity = 0;
@@ -451,15 +486,17 @@
                 likeIndicator.style.opacity = 0;
                 nopeIndicator.style.transform = `rotate(15deg) scale(${0.5 + opacity * 0.5})`;
             } else {
-                likeIndicator.style.opacity = 0;
-                nopeIndicator.style.opacity = 0;
+                 likeIndicator.style.opacity = 0;
+                 nopeIndicator.style.opacity = 0;
             }
         }
+        
         function endDrag() {
             if (!isDragging || !currentCard) return;
             isDragging = false;
             currentCard.classList.remove('dragging');
             const decisionThreshold = window.innerWidth * 0.3;
+
             if (offsetX > decisionThreshold) swipe('right');
             else if (offsetX < -decisionThreshold) swipe('left');
             else {
@@ -469,15 +506,19 @@
             }
             offsetX = 0;
         }
+
         function swipe(direction) {
             if (!currentCard) return;
             removeCardEventListeners();
             const photoId = currentCard.dataset.id;
             const voteType = direction === 'right' ? 'like' : 'nope';
+
             const flyOutX = (direction === 'right' ? 1 : -1) * (window.innerWidth + 200);
             const rotation = (direction === 'right' ? 1 : -1) * 30;
             currentCard.style.transform = `translateX(${flyOutX}px) rotate(${rotation}deg)`;
+
             handleVote(photoId, voteType);
+            
             setTimeout(() => {
                 if(currentCard) currentCard.remove();
                 votedPhotoIds.add(photoId);
@@ -485,16 +526,19 @@
                 renderCards();
             }, 500);
         }
+
         async function handleVote(photoId, voteType) {
-            if (!currentUser) return;
-            try {
+             if (!currentUser) return;
+             try {
                 await runTransaction(db, async (transaction) => {
                     const userRef = doc(db, usersPath, currentUser.uid);
                     const photoRef = doc(db, photosPath, photoId);
                     const voteRef = doc(db, votesPath, `${currentUser.uid}_${photoId}`);
                     const [userDoc, photoDoc] = await Promise.all([ transaction.get(userRef), transaction.get(photoRef) ]);
+                    
                     const newSwipeCount = (userDoc.data()?.swipeCount || 0) + 1;
                     transaction.set(userRef, { swipeCount: newSwipeCount }, { merge: true });
+
                     if (photoDoc.exists()) {
                         const newLikes = (photoDoc.data().likes || 0) + (voteType === 'like' ? 1 : 0);
                         const newNopes = (photoDoc.data().nopes || 0) + (voteType === 'nope' ? 1 : 0);
@@ -502,8 +546,9 @@
                     }
                     transaction.set(voteRef, { userId: currentUser.uid, photoId: photoId, vote: voteType });
                 });
-            } catch (e) { console.error("Transaction failed: ", e); }
+             } catch (e) { console.error("Transaction failed: ", e); }
         }
+        
         // --- Admin Panel Logik ---
         function updateAdminUI(isLoggedIn) {
             if (isLoggedIn) {
@@ -519,6 +564,7 @@
                 if (gapi?.client) gapi.client.setToken(null);
             }
         }
+
         googleSigninBtn.addEventListener('click', () => {
             if (!gapiInited || !gsiInited) {
                 adminStatus.textContent = 'Google API wird noch geladen...';
@@ -526,6 +572,7 @@
             }
             googleTokenClient.requestAccessToken();
         });
+
         googleSignoutBtn.addEventListener('click', () => {
             const token = gapi.client.getToken();
             if (token) {
@@ -534,12 +581,14 @@
                 updateAdminUI(false);
             }
         });
+
         syncPhotosBtn.addEventListener('click', async () => {
             const albumTitle = albumTitleInput.value.trim();
             if (!albumTitle) {
                 adminStatus.textContent = 'Bitte gib einen Album-Titel ein.'; return;
             }
             adminStatus.textContent = 'Suche nach Alben...';
+
             try {
                 const response = await gapi.client.photoslibrary.albums.list({ pageSize: 50 });
                 const album = response.result.albums?.find(a => a.title === albumTitle);
@@ -547,6 +596,7 @@
                     adminStatus.textContent = `Album "${albumTitle}" nicht gefunden.`; return;
                 }
                 adminStatus.textContent = `Album gefunden. Lade Bilder...`;
+
                 let allMediaItems = [];
                 let nextPageToken = null;
                 do {
@@ -554,13 +604,16 @@
                     if (mediaResponse.result.mediaItems) allMediaItems.push(...mediaResponse.result.mediaItems);
                     nextPageToken = mediaResponse.result.nextPageToken;
                 } while (nextPageToken);
+
                 if (allMediaItems.length === 0) {
                     adminStatus.textContent = 'Album ist leer.'; return;
                 }
                 adminStatus.textContent = `${allMediaItems.length} Bilder gefunden. Prüfe auf Duplikate...`;
+                
                 const photoUrls = allMediaItems.map(item => ({ id: item.id, url: item.baseUrl }));
                 const existingPhotosSnapshot = await getDocs(collection(db, photosPath));
                 const existingPhotoIds = new Set(existingPhotosSnapshot.docs.map(doc => doc.id));
+                
                 let newPhotosCount = 0;
                 for (const photo of photoUrls) {
                     if (!existingPhotoIds.has(photo.id)) {
@@ -570,12 +623,14 @@
                 }
                 adminStatus.textContent = `Sync abgeschlossen! ${newPhotosCount} neue(s) Bild(er) hinzugefügt.`;
                 albumTitleInput.value = '';
+
             } catch (error) {
                 console.error('Google Photos API error:', error);
                 adminStatus.textContent = 'Fehler: ' + (error.result?.error?.message || error.message);
                 if(error.result?.error?.status === 'UNAUTHENTICATED') updateAdminUI(false);
             }
         });
+
         // --- Modal & Button Listeners ---
         function setupModal(modalId, buttonId) {
             document.getElementById(buttonId).addEventListener('click', async () => {
@@ -592,16 +647,20 @@
         setupModal('admin-modal', 'admin-btn');
         likeBtn.addEventListener('click', () => swipe('right'));
         nopeBtn.addEventListener('click', () => swipe('left'));
+
         async function updateRankings() {
             // --- Image Rankings (In-memory sort) ---
             const topImagesQuery = query(collection(db, photosPath));
             try {
                 const imageSnapshot = await getDocs(topImagesQuery);
                 imageRankingsList.innerHTML = imageSnapshot.empty ? '<p class="text-gray-400">Noch keine bewerteten Bilder.</p>' : '';
+                
                 const allImages = [];
                 imageSnapshot.forEach(doc => allImages.push(doc.data()));
+                
                 allImages.sort((a, b) => (b.likes || 0) - (a.likes || 0));
                 const topImages = allImages.slice(0, 10);
+                
                 let rank = 1;
                 topImages.forEach(data => {
                     const li = document.createElement('div');
@@ -617,15 +676,19 @@
                 console.error("Error updating image rankings", e);
                 imageRankingsList.innerHTML = '<p class="text-red-400">Fehler beim Laden der Bild-Rankings.</p>'; 
             }
+
             // --- User Rankings (In-memory sort) ---
             const topUsersQuery = query(collection(db, usersPath));
             try {
                 const userSnapshot = await getDocs(topUsersQuery);
                 userRankingsList.innerHTML = userSnapshot.empty ? '<p class="text-gray-400">Noch keine Swipes erfasst.</p>' : '';
+
                 const allUsers = [];
                 userSnapshot.forEach(doc => allUsers.push({ id: doc.id, ...doc.data() }));
+
                 allUsers.sort((a, b) => (b.swipeCount || 0) - (a.swipeCount || 0));
                 const topUsers = allUsers.slice(0, 10);
+
                 let rank = 1;
                 topUsers.forEach(user => {
                     const li = document.createElement('div');
@@ -644,3 +707,5 @@
     </script>
 </body>
 </html>
+
+
