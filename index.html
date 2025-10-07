@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="de" class="h-full bg-gray-900 text-white">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photo Tinder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Google Identity Services and Google API client for Photos -->
+    <script src="https://accounts.google.com/gsi/client" async defer onload="onGsiLoaded()"></script>
+    <script src="https://apis.google.com/js/api.js" async defer onload="onGapiLoaded()"></script>
+    <style>
+        :root {
+            --glow-color-like: #4ade80; /* green-400 */
+            --glow-color-nope: #f87171; /* red-400 */
+            --glow-color-action: #22d3ee; /* cyan-400 */
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .card-container {
+            perspective: 1000px;
+            position: relative;
+            width: 90vw;
+            height: 120vw;
+            max-width: 400px;
+            max-height: 560px;
+            margin-top: 1.5rem;
+        }
+        .card {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            transform-style: preserve-3d;
+            transition: transform 0.5s ease, box-shadow 0.3s ease;
+            cursor: grab;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+            background-size: cover;
+            background-position: center;
+            overflow: hidden;
+            display: flex;
+            align-items: flex-end;
+        }
+        .card.dragging {
+            transition: none;
+            cursor: grabbing;
+        }
+        /* Card Stack effect */
+        .card:nth-child(2) { transform: translateY(-10px) scale(0.95); z-index: -1; }
+        .card:nth-child(3) { transform: translateY(-20px) scale(0.90); z-index: -2; }
+        .card-overlay {
+            width: 100%;
+            padding: 1rem 1.5rem;
+            background: linear-gradient(to top, rgba(0,0,0,0.85) 20%, transparent);
+        }
+        .vote-indicator {
+            position: absolute;
+            top: 40px;
+            font-size: 3rem;
+            font-weight: bold;
+            text-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+            opacity: 0;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            border: 3px solid;
+            border-radius: 0.5rem;
+            padding: 0.5rem 1rem;
+        }
+        .like-indicator {
+            color: var(--glow-color-like);
+            border-color: var(--glow-color-like);
+            left: 20px;
+            transform: rotate(-15deg) scale(0.5);
+            box-shadow: 0 0 20px var(--glow-color-like);
+        }
+        .nope-indicator {
+            color: var(--glow-color-nope);
+            border-color: var(--glow-color-nope);
+            right: 20px;
+            transform: rotate(15deg) scale(0.5);
+            box-shadow: 0 0 20px var(--glow-color-nope);
+        }
+        .action-button {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(.21,1.5,.74,1.25);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5), inset 0 2px 2px rgba(255,255,255,0.2);
+            border: 2px solid rgba(255,255,255,0.2);
+        }
+        .action-button:hover {
+            transform: scale(1.15);
+        }
+        .action-button:active {
+            transform: scale(1.05);
+            filter: brightness(0.9);
+        }
+        #nope-btn { background-color: #ef4444; }
+        #nope-btn:hover { box-shadow: 0 0 25px var(--glow-color-nope); }
+        #like-btn { background-color: #22c55e; }
+        #like-btn:hover { box-shadow: 0 0 25px var(--glow-color-like); }
+        /* Modal styling */
+        .modal {
+            transition: opacity 0.3s ease-in-out, transform 0.3s cubic-bezier(.21,1.5,.74,1.25);
+        }
+        .modal.hidden {
+            opacity: 0;
+            transform: scale(0.8);
+            pointer-events: none;
+        }
+        .modal-content {
+            box-shadow: 0 0 30px var(--glow-color-action);
+            border: 1px solid var(--glow-color-action);
+        }
+        /* Loading Spinner */
+        .loader {
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-left-color: var(--glow-color-action);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4 overflow-hidden">
+    <!-- Header -->
+    <header class="w-full max-w-md flex justify-between items-center absolute top-0 p-4 z-10">
+        <h1 class="text-2xl font-bold text-white tracking-tight" style="text-shadow: 0 0 10px var(--glow-color-action);">Photo Tinder</h1>
+        <div>
+            <button id="admin-btn" class="p-2 rounded-full hover:bg-gray-700 transition-transform duration-200 hover:scale-110 mr-2">
+                <i class="fas fa-tools text-xl text-cyan-400"></i>
+            </button>
+            <button id="rankings-btn" class="p-2 rounded-full hover:bg-gray-700 transition-transform duration-200 hover:scale-110">
+                <i class="fas fa-trophy text-xl text-yellow-400"></i>
+            </button>
+        </div>
+    </header>
+    <!-- Loading State -->
+    <div id="loading-view" class="flex flex-col items-center justify-center space-y-4">
+        <div class="loader"></div>
+        <p class="text-gray-400">Melde dich an &amp; lade Bilder...</p>
+    </div>
+    <!-- Main App View -->
+    <main id="app-view" class="hidden flex flex-col items-center justify-center flex-grow">
+        <div id="card-stack" class="card-container"></div>
+        <div id="no-more-photos" class="hidden text-center p-8 bg-gray-800 rounded-2xl">
+            <h2 class="text-2xl font-bold mb-2">Alles gesehen!</h2>
+            <p class="text-gray-400">Du hast alle verfügbaren Bilder bewertet. Schau später wieder vorbei!</p>
+        </div>
+        <div class="flex justify-center gap-6 mt-6">
+            <button id="nope-btn" class="action-button"><i class="fas fa-times"></i></button>
+            <button id="like-btn" class="action-button"><i class="fas fa-heart"></i></button>
+        </div>
+    </main>
+    <!-- Footer with User ID -->
+    <footer class="w-full text-center p-4 absolute bottom-0">
+        <p id="user-info" class="text-xs text-gray-500"></p>
+    </footer>
+    <!-- Modals -->
+    <div id="modal-container">
+        <!-- Rankings Modal -->
+        <div id="rankings-modal" class="hidden modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+            <div class="modal-content bg-gray-800 rounded-2xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold text-cyan-300">Rankings</h2>
+                    <button data-close-modal="rankings-modal" class="text-2xl hover:text-cyan-300 transition-transform duration-200 hover:scale-125">&times;</button>
+                </div>
+                <div class="space-y-6">
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2 border-b-2 border-cyan-400 pb-1">Top Bilder</h3>
+                        <div id="image-rankings-list" class="space-y-2"></div>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2 border-b-2 border-cyan-400 pb-1">Top Swiper</h3>
+                        <div id="user-rankings-list" class="space-y-2"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Admin Modal -->
+        <div id="admin-modal" class="hidden modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+            <div class="modal-content bg-gray-800 rounded-2xl p-6 w-full max-w-md">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold text-cyan-300">Admin Panel</h2>
+                    <button data-close-modal="admin-modal" class="text-2xl hover:text-cyan-300 transition-transform duration-200 hover:scale-125">&times;</button>
+                </div>
+                <div id="admin-content" class="space-y-4">
+                    <p class="text-gray-400 text-sm">Synchronisiere Bilder aus einem Google Photos Album, dem du beigetreten bist.</p>
+                    <div id="google-auth-ui">
+                        <button id="google-signin-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-all duration-200">
+                            <i class="fab fa-google"></i> Mit Google anmelden
+                        </button>
+                    </div>
+                    <div id="google-sync-ui" class="hidden">
+                        <p id="google-user-info" class="text-sm text-green-400 mb-2"></p>
+                        <input type="text" id="album-title-input" placeholder="Name des Albums hier eingeben" class="w-full p-2 rounded-lg bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-400">
+                        <button id="sync-photos-btn" class="w-full mt-2 bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200">
+                            Bilder Synchronisieren
+                        </button>
+                        <button id="google-signout-btn" class="w-full mt-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200">
+                            Abmelden
+                        </button>
+                    </div>
+                    <div id="admin-status" class="text-sm text-yellow-400 min-h-[20px]"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script type="module">
+        // Import Firebase modules
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, collection, doc, getDocs, onSnapshot, 
+            runTransaction, query, where, addDoc, setDoc
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // --- Konfiguration ---
+        // These globals (__firebase_config, __app_id, __initial_auth_token) will be injected via build/deployment scripts.
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : { apiKey: "dummy-key", authDomain: "dummy.firebaseapp.com", projectId: "dummy-project" };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const GOOGLE_CLIENT_ID = typeof __google_client_id !== 'undefined' ? __google_client_id : "your-google-client-id.apps.googleusercontent.com";
+        const GOOGLE_API_SCOPES = 'https://www.googleapis.com/auth/photoslibrary.readonly';
+        // --- App Initialisierung ---
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        // --- DOM-Elemente ---
+        const loadingView = document.getElementById('loading-view');
+        const appView = document.getElementById('app-view');
+        const cardStack = document.getElementById('card-stack');
+        const noMorePhotosView = document.getElementById('no-more-photos');
+        const likeBtn = document.getElementById('like-btn');
+        const nopeBtn = document.getElementById('nope-btn');
+        const userInfo = document.getElementById('user-info');
+        // Modals
+        const rankingsModal = document.getElementById('rankings-modal');
+        const adminModal = document.getElementById('admin-modal');
+        const rankingsBtn = document.getElementById('rankings-btn');
+        const adminBtn = document.getElementById('admin-btn');
+        const imageRankingsList = document.getElementById('image-rankings-list');
+        const userRankingsList = document.getElementById('user-rankings-list');
+        // Admin UI
+        const adminStatus = document.getElementById('admin-status');
+        const googleSigninBtn = document.getElementById('google-signin-btn');
+        const googleSignoutBtn = document.getElementById('google-signout-btn');
+        const googleAuthUI = document.getElementById('google-auth-ui');
+        const googleSyncUI = document.getElementById('google-sync-ui');
+        const googleUserInfo = document.getElementById('google-user-info');
+        const albumTitleInput = document.getElementById('album-title-input');
+        const syncPhotosBtn = document.getElementById('sync-photos-btn');
+        // --- App-Status ---
+        let currentUser = null;
+        let currentCard = null;
+        let photos = [];
+        let votedPhotoIds = new Set();
+        let isDragging = false;
+        let startX = 0; 
+        let offsetX = 0;
+        let gapiInited = false;
+        let gsiInited = false;
+        let googleTokenClient;
+        // --- Collection Paths ---
+        const photosPath = `artifacts/${appId}/public/data/photos`;
+        const usersPath = `artifacts/${appId}/public/data/users`;
+        const votesPath = `artifacts/${appId}/public/data/votes`;
+        // --- API Ready Check ---
+        function checkApisReadyAndInitAdminUI() {
+            if (gapiInited && gsiInited) {
+                updateAdminUI(false);
+            }
+        }
+        // --- Google API Integration ---
+        window.onGapiLoaded = () => {
+            gapi.load('client', () => {
+                gapi.client.init({
+                    apiKey: firebaseConfig.apiKey,
+                    discoveryDocs: ['https://photoslibrary.googleapis.com/$discovery/rest?version=v1'],
+                }).then(() => { 
+                    gapiInited = true;
+                    checkApisReadyAndInitAdminUI();
+                });
+            });
+        };
+        window.onGsiLoaded = () => {
+            googleTokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: GOOGLE_CLIENT_ID,
+                scope: GOOGLE_API_SCOPES,
+                callback: (tokenResponse) => {
+                    if (tokenResponse && tokenResponse.access_token) {
+                        gapi.client.setToken(tokenResponse);
+                        updateAdminUI(true);
+                    }
+                },
+            });
+            gsiInited = true;
+            checkApisReadyAndInitAdminUI();
+        };
+        // --- Hauptlogik (Firebase Auth) ---
+        async function main() {
+            try {
+                // Wait for the auth state to be ready first. This prevents race conditions.
+                await auth.authStateReady();
+                let user = auth.currentUser;
+                // If no user is found after the state is ready, we need to sign them in.
+                if (!user) {
+                    let userCredential;
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        userCredential = await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        userCredential = await signInAnonymously(auth);
+                    }
+                    user = userCredential.user;
+                }
+                // If we have a user, proceed with app initialization.
+                if (user) {
+                    if (currentUser) return; // Avoid re-initializing
+                    currentUser = user;
+                    userInfo.textContent = `UserID: ${user.uid}`;
+                    loadingView.classList.add('hidden');
+                    appView.classList.remove('hidden');
+                    initializeAppLogic();
+                } else {
+                    throw new Error("Could not authenticate user.");
+                }
+                // After initialization, listen for any future auth state changes (e.g., sign-out).
+                onAuthStateChanged(auth, (user) => {
+                    if (!user) {
+                        console.log("User signed out, reloading...");
+                        currentUser = null;
+                        location.reload();
+                    }
+                });
+            } catch (error) {
+                console.error("Authentication failed during startup:", error);
+                loadingView.innerHTML = '<p class="text-red-400">Anmeldung fehlgeschlagen. App kann nicht gestartet werden.</p>';
+            }
+        }
+        main();
+        async function initializeAppLogic() {
+            await loadVotedPhotos();
+            listenForPhotos();
+        }
+        async function loadVotedPhotos() {
+            if (!currentUser) return;
+            const votesQuery = query(collection(db, votesPath), where('userId', '==', currentUser.uid));
+            try {
+                const querySnapshot = await getDocs(votesQuery);
+                querySnapshot.forEach(doc => votedPhotoIds.add(doc.data().photoId));
+            } catch (error) {
+                console.error("Error loading voted photos:", error);
+            }
+        }
+        function listenForPhotos() {
+            const photosQuery = query(collection(db, photosPath));
+            onSnapshot(photosQuery, (snapshot) => {
+                const newPhotos = [];
+                snapshot.forEach(doc => {
+                    if (!votedPhotoIds.has(doc.id)) {
+                        newPhotos.push({ id: doc.id, ...doc.data() });
+                    }
+                });
+                photos = newPhotos.sort(() => Math.random() - 0.5);
+                renderCards();
+            }, (error) => {
+                console.error("Error listening for photos:", error);
+            });
+        }
+        function renderCards() {
+            cardStack.innerHTML = '';
+            if (photos.length > 0) {
+                noMorePhotosView.classList.add('hidden');
+                cardStack.classList.remove('hidden');
+                photos.slice(0, 3).reverse().forEach(photo => createCard(photo));
+                currentCard = cardStack.lastElementChild;
+                if(currentCard) addCardEventListeners(currentCard);
+            } else {
+                noMorePhotosView.classList.remove('hidden');
+                cardStack.classList.add('hidden');
+                currentCard = null;
+            }
+        }
+        function createCard(photo) {
+            const cardEl = document.createElement('div');
+            cardEl.className = 'card';
+            cardEl.style.backgroundImage = `url('${photo.url}')`;
+            cardEl.dataset.id = photo.id;
+            const overlay = document.createElement('div');
+            overlay.className = 'card-overlay';
+            const likeIndicator = document.createElement('div');
+            likeIndicator.className = 'vote-indicator like-indicator';
+            likeIndicator.textContent = 'LIKE';
+            const nopeIndicator = document.createElement('div');
+            nopeIndicator.className = 'vote-indicator nope-indicator';
+            nopeIndicator.textContent = 'NOPE';
+            cardEl.append(overlay, likeIndicator, nopeIndicator);
+            cardStack.appendChild(cardEl);
+        }
+        function addCardEventListeners(card) {
+            card.addEventListener('mousedown', startDrag);
+            card.addEventListener('touchstart', startDrag, { passive: true });
+            window.addEventListener('mousemove', drag);
+            window.addEventListener('touchmove', drag, { passive: true });
+            window.addEventListener('mouseup', endDrag);
+            window.addEventListener('touchend', endDrag);
+        }
+        function removeCardEventListeners() {
+            window.removeEventListener('mousemove', drag);
+            window.removeEventListener('touchmove', drag);
+            window.removeEventListener('mouseup', endDrag);
+            window.removeEventListener('touchend', endDrag);
+        }
+        function startDrag(e) {
+            if (!currentCard) return;
+            isDragging = true;
+            currentCard.classList.add('dragging');
+            startX = e.pageX || e.touches[0].pageX;
+        }
+        function drag(e) {
+            if (!isDragging || !currentCard) return;
+            e.preventDefault();
+            const currentX = e.pageX || e.touches[0].pageX;
+            offsetX = currentX - startX;
+            const rotation = offsetX * 0.1;
+            currentCard.style.transform = `translateX(${offsetX}px) rotate(${rotation}deg)`;
+            const likeIndicator = currentCard.querySelector('.like-indicator');
+            const nopeIndicator = currentCard.querySelector('.nope-indicator');
+            const opacity = Math.min(Math.abs(offsetX) / 100, 1);
+            if (offsetX > 10) {
+                likeIndicator.style.opacity = opacity;
+                nopeIndicator.style.opacity = 0;
+                likeIndicator.style.transform = `rotate(-15deg) scale(${0.5 + opacity * 0.5})`;
+            } else if (offsetX < -10) {
+                nopeIndicator.style.opacity = opacity;
+                likeIndicator.style.opacity = 0;
+                nopeIndicator.style.transform = `rotate(15deg) scale(${0.5 + opacity * 0.5})`;
+            } else {
+                likeIndicator.style.opacity = 0;
+                nopeIndicator.style.opacity = 0;
+            }
+        }
+        function endDrag() {
+            if (!isDragging || !currentCard) return;
+            isDragging = false;
+            currentCard.classList.remove('dragging');
+            const decisionThreshold = window.innerWidth * 0.3;
+            if (offsetX > decisionThreshold) swipe('right');
+            else if (offsetX < -decisionThreshold) swipe('left');
+            else {
+                currentCard.style.transform = 'translateX(0) rotate(0deg)';
+                currentCard.querySelector('.like-indicator').style.opacity = 0;
+                currentCard.querySelector('.nope-indicator').style.opacity = 0;
+            }
+            offsetX = 0;
+        }
+        function swipe(direction) {
+            if (!currentCard) return;
+            removeCardEventListeners();
+            const photoId = currentCard.dataset.id;
+            const voteType = direction === 'right' ? 'like' : 'nope';
+            const flyOutX = (direction === 'right' ? 1 : -1) * (window.innerWidth + 200);
+            const rotation = (direction === 'right' ? 1 : -1) * 30;
+            currentCard.style.transform = `translateX(${flyOutX}px) rotate(${rotation}deg)`;
+            handleVote(photoId, voteType);
+            setTimeout(() => {
+                if(currentCard) currentCard.remove();
+                votedPhotoIds.add(photoId);
+                photos.shift();
+                renderCards();
+            }, 500);
+        }
+        async function handleVote(photoId, voteType) {
+            if (!currentUser) return;
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const userRef = doc(db, usersPath, currentUser.uid);
+                    const photoRef = doc(db, photosPath, photoId);
+                    const voteRef = doc(db, votesPath, `${currentUser.uid}_${photoId}`);
+                    const [userDoc, photoDoc] = await Promise.all([ transaction.get(userRef), transaction.get(photoRef) ]);
+                    const newSwipeCount = (userDoc.data()?.swipeCount || 0) + 1;
+                    transaction.set(userRef, { swipeCount: newSwipeCount }, { merge: true });
+                    if (photoDoc.exists()) {
+                        const newLikes = (photoDoc.data().likes || 0) + (voteType === 'like' ? 1 : 0);
+                        const newNopes = (photoDoc.data().nopes || 0) + (voteType === 'nope' ? 1 : 0);
+                        transaction.update(photoRef, { likes: newLikes, nopes: newNopes });
+                    }
+                    transaction.set(voteRef, { userId: currentUser.uid, photoId: photoId, vote: voteType });
+                });
+            } catch (e) { console.error("Transaction failed: ", e); }
+        }
+        // --- Admin Panel Logik ---
+        function updateAdminUI(isLoggedIn) {
+            if (isLoggedIn) {
+                googleAuthUI.classList.add('hidden');
+                googleSyncUI.classList.remove('hidden');
+                googleUserInfo.textContent = 'Erfolgreich bei Google angemeldet.';
+            } else {
+                googleAuthUI.classList.remove('hidden');
+                googleSyncUI.classList.add('hidden');
+                googleUserInfo.textContent = '';
+                albumTitleInput.value = '';
+                adminStatus.textContent = '';
+                if (gapi?.client) gapi.client.setToken(null);
+            }
+        }
+        googleSigninBtn.addEventListener('click', () => {
+            if (!gapiInited || !gsiInited) {
+                adminStatus.textContent = 'Google API wird noch geladen...';
+                return;
+            }
+            googleTokenClient.requestAccessToken();
+        });
+        googleSignoutBtn.addEventListener('click', () => {
+            const token = gapi.client.getToken();
+            if (token) {
+                google.accounts.oauth2.revoke(token.access_token, () => updateAdminUI(false));
+            } else {
+                updateAdminUI(false);
+            }
+        });
+        syncPhotosBtn.addEventListener('click', async () => {
+            const albumTitle = albumTitleInput.value.trim();
+            if (!albumTitle) {
+                adminStatus.textContent = 'Bitte gib einen Album-Titel ein.'; return;
+            }
+            adminStatus.textContent = 'Suche nach Alben...';
+            try {
+                const response = await gapi.client.photoslibrary.albums.list({ pageSize: 50 });
+                const album = response.result.albums?.find(a => a.title === albumTitle);
+                if (!album) {
+                    adminStatus.textContent = `Album "${albumTitle}" nicht gefunden.`; return;
+                }
+                adminStatus.textContent = `Album gefunden. Lade Bilder...`;
+                let allMediaItems = [];
+                let nextPageToken = null;
+                do {
+                    const mediaResponse = await gapi.client.photoslibrary.mediaItems.search({ albumId: album.id, pageSize: 100, pageToken: nextPageToken });
+                    if (mediaResponse.result.mediaItems) allMediaItems.push(...mediaResponse.result.mediaItems);
+                    nextPageToken = mediaResponse.result.nextPageToken;
+                } while (nextPageToken);
+                if (allMediaItems.length === 0) {
+                    adminStatus.textContent = 'Album ist leer.'; return;
+                }
+                adminStatus.textContent = `${allMediaItems.length} Bilder gefunden. Prüfe auf Duplikate...`;
+                const photoUrls = allMediaItems.map(item => ({ id: item.id, url: item.baseUrl }));
+                const existingPhotosSnapshot = await getDocs(collection(db, photosPath));
+                const existingPhotoIds = new Set(existingPhotosSnapshot.docs.map(doc => doc.id));
+                let newPhotosCount = 0;
+                for (const photo of photoUrls) {
+                    if (!existingPhotoIds.has(photo.id)) {
+                        await setDoc(doc(db, photosPath, photo.id), { url: photo.url, likes: 0, nopes: 0, sourceAlbum: album.title });
+                        newPhotosCount++;
+                    }
+                }
+                adminStatus.textContent = `Sync abgeschlossen! ${newPhotosCount} neue(s) Bild(er) hinzugefügt.`;
+                albumTitleInput.value = '';
+            } catch (error) {
+                console.error('Google Photos API error:', error);
+                adminStatus.textContent = 'Fehler: ' + (error.result?.error?.message || error.message);
+                if(error.result?.error?.status === 'UNAUTHENTICATED') updateAdminUI(false);
+            }
+        });
+        // --- Modal & Button Listeners ---
+        function setupModal(modalId, buttonId) {
+            document.getElementById(buttonId).addEventListener('click', async () => {
+                if (modalId === 'rankings-modal') await updateRankings();
+                document.getElementById(modalId).classList.remove('hidden');
+            });
+        }
+        document.querySelectorAll('[data-close-modal]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById(btn.getAttribute('data-close-modal')).classList.add('hidden');
+            });
+        });
+        setupModal('rankings-modal', 'rankings-btn');
+        setupModal('admin-modal', 'admin-btn');
+        likeBtn.addEventListener('click', () => swipe('right'));
+        nopeBtn.addEventListener('click', () => swipe('left'));
+        async function updateRankings() {
+            // --- Image Rankings (In-memory sort) ---
+            const topImagesQuery = query(collection(db, photosPath));
+            try {
+                const imageSnapshot = await getDocs(topImagesQuery);
+                imageRankingsList.innerHTML = imageSnapshot.empty ? '<p class="text-gray-400">Noch keine bewerteten Bilder.</p>' : '';
+                const allImages = [];
+                imageSnapshot.forEach(doc => allImages.push(doc.data()));
+                allImages.sort((a, b) => (b.likes || 0) - (a.likes || 0));
+                const topImages = allImages.slice(0, 10);
+                let rank = 1;
+                topImages.forEach(data => {
+                    const li = document.createElement('div');
+                    li.className = 'flex items-center gap-4 p-2 bg-gray-700 rounded-lg';
+                    li.innerHTML = `
+                        <div class="font-bold text-lg w-6 text-center">${rank++}</div>
+                        <img src="${data.url}" class="w-12 h-12 object-cover rounded-md">
+                        <div class="flex-grow"><div class="font-semibold">Likes: ${data.likes || 0}</div>
+                        <div class="text-xs text-gray-400">Nopes: ${data.nopes || 0}</div></div>`;
+                    imageRankingsList.appendChild(li);
+                });
+            } catch(e) { 
+                console.error("Error updating image rankings", e);
+                imageRankingsList.innerHTML = '<p class="text-red-400">Fehler beim Laden der Bild-Rankings.</p>'; 
+            }
+            // --- User Rankings (In-memory sort) ---
+            const topUsersQuery = query(collection(db, usersPath));
+            try {
+                const userSnapshot = await getDocs(topUsersQuery);
+                userRankingsList.innerHTML = userSnapshot.empty ? '<p class="text-gray-400">Noch keine Swipes erfasst.</p>' : '';
+                const allUsers = [];
+                userSnapshot.forEach(doc => allUsers.push({ id: doc.id, ...doc.data() }));
+                allUsers.sort((a, b) => (b.swipeCount || 0) - (a.swipeCount || 0));
+                const topUsers = allUsers.slice(0, 10);
+                let rank = 1;
+                topUsers.forEach(user => {
+                    const li = document.createElement('div');
+                    li.className = 'flex items-center gap-4 p-2 bg-gray-700 rounded-lg';
+                    li.innerHTML = `
+                        <div class="font-bold text-lg w-6 text-center">${rank++}</div>
+                        <div class="flex-grow"><div class="font-semibold text-sm truncate" title="${user.id}">UserID: ...${user.id.slice(-8)}</div>
+                        <div class="text-xs text-gray-400">Swipes: ${user.swipeCount || 0}</div></div>`;
+                    userRankingsList.appendChild(li);
+                });
+            } catch(e) { 
+                console.error("Error updating user rankings", e);
+                userRankingsList.innerHTML = '<p class="text-red-400">Fehler beim Laden der User-Rankings.</p>'; 
+            }
+        }
+    </script>
+</body>
+</html>
