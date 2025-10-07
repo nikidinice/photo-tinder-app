@@ -36,12 +36,15 @@
             width: 100%;
             height: 100%;
             transform-style: preserve-3d;
-            transition: transform 0.5s ease, box-shadow 0.3s ease;
+            transition: transform 0.5s ease, box-shadow 0.3s ease, opacity 0.5s ease;
             cursor: grab;
             border-radius: 1.5rem;
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
-            background-size: cover;
+            /* --- Bild-Anpassung --- */
+            background-size: contain;
+            background-repeat: no-repeat;
             background-position: center;
+            background-color: #000;
             overflow: hidden;
             display: flex;
             align-items: flex-end;
@@ -51,8 +54,8 @@
             cursor: grabbing;
         }
         /* Card Stack effect */
-        .card:nth-child(2) { transform: translateY(-10px) scale(0.95); z-index: -1; }
-        .card:nth-child(3) { transform: translateY(-20px) scale(0.90); z-index: -2; }
+        .card:nth-child(2) { transform: translateY(-10px) scale(0.95); }
+        .card:nth-child(3) { transform: translateY(-20px) scale(0.90); }
         
         .card-overlay {
             width: 100%;
@@ -169,6 +172,9 @@
         <div id="no-more-photos" class="hidden text-center p-8 bg-gray-800 rounded-2xl">
             <h2 class="text-2xl font-bold mb-2">Alles gesehen!</h2>
             <p class="text-gray-400">Du hast alle verfügbaren Bilder bewertet. Schau später wieder vorbei!</p>
+            <button id="meme-mode-btn" class="mt-4 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200 animate-pulse">
+                Meme-Modus starten <i class="fas fa-laugh-beam"></i>
+            </button>
         </div>
         <div class="flex justify-center gap-6 mt-6">
             <button id="nope-btn" class="action-button"><i class="fas fa-times"></i></button>
@@ -251,7 +257,7 @@
         
         // --- Google API Konfiguration ---
         const GOOGLE_API_KEY = "AIzaSyBstYQNtCxQo2po0cl5Lm4IMSFJwwp97lk";
-        const GOOGLE_CLIENT_ID = "837803783927-eq876vb8gpt0qgu28qdqtur5bl6qtag9.apps.googleusercontent.com";
+        const GOOGLE_CLIENT_ID = "837803783927-jusrc3j0vkjglonigdnrba1q4eg82cmm.apps.googleusercontent.com";
         const GOOGLE_API_SCOPES = 'https://www.googleapis.com/auth/photoslibrary.readonly';
         
         // --- App Initialisierung ---
@@ -267,6 +273,7 @@
         const likeBtn = document.getElementById('like-btn');
         const nopeBtn = document.getElementById('nope-btn');
         const userInfo = document.getElementById('user-info');
+        const memeModeBtn = document.getElementById('meme-mode-btn');
         // Modals
         const rankingsModal = document.getElementById('rankings-modal');
         const adminModal = document.getElementById('admin-modal');
@@ -294,6 +301,16 @@
         let gapiInited = false;
         let gsiInited = false;
         let googleTokenClient;
+        let isMemeMode = false;
+
+        // --- Meme Data ---
+        const memeData = [
+            "https://i.imgur.com/VwJ7kcJ.jpeg",
+            "https://i.imgur.com/rLEUp3c.jpeg",
+            "https://i.imgur.com/RUL7LPq.png",
+            "https://i.imgur.com/2l5jiGe.jpeg",
+            "https://i.imgur.com/CwySGhb.jpeg"
+        ];
 
         // --- Collection Paths ---
         const photosPath = `artifacts/${appId}/public/data/photos`;
@@ -395,6 +412,7 @@
         function listenForPhotos() {
             const photosQuery = query(collection(db, photosPath));
             onSnapshot(photosQuery, (snapshot) => {
+                if (isMemeMode) return; // Don't interrupt meme mode
                 const newPhotos = [];
                 snapshot.forEach(doc => {
                     if (!votedPhotoIds.has(doc.id)) {
@@ -413,20 +431,32 @@
             if (photos.length > 0) {
                 noMorePhotosView.classList.add('hidden');
                 cardStack.classList.remove('hidden');
-                photos.slice(0, 3).reverse().forEach(photo => createCard(photo));
-                currentCard = cardStack.lastElementChild;
+                
+                const topPhotos = photos.slice(0, 3);
+                topPhotos.forEach((photo, index) => {
+                    // Pass z-index to createCard, highest z-index for the first card.
+                    createCard(photo, topPhotos.length - index);
+                });
+
+                currentCard = cardStack.firstElementChild;
                 if(currentCard) addCardEventListeners(currentCard);
             } else {
+                if (isMemeMode) {
+                    // If meme mode ends, go back to normal
+                    isMemeMode = false;
+                    listenForPhotos(); // Re-fetch normal photos
+                }
                 noMorePhotosView.classList.remove('hidden');
                 cardStack.classList.add('hidden');
                 currentCard = null;
             }
         }
 
-        function createCard(photo) {
+        function createCard(photo, zIndex) {
             const cardEl = document.createElement('div');
             cardEl.className = 'card';
             cardEl.style.backgroundImage = `url('${photo.url}')`;
+            cardEl.style.zIndex = zIndex;
             cardEl.dataset.id = photo.id;
             
             const overlay = document.createElement('div');
@@ -509,25 +539,33 @@
 
         function swipe(direction) {
             if (!currentCard) return;
+            
+            const cardToAnimate = currentCard;
             removeCardEventListeners();
-            const photoId = currentCard.dataset.id;
+            
+            const photoId = cardToAnimate.dataset.id;
             const voteType = direction === 'right' ? 'like' : 'nope';
 
             const flyOutX = (direction === 'right' ? 1 : -1) * (window.innerWidth + 200);
             const rotation = (direction === 'right' ? 1 : -1) * 30;
-            currentCard.style.transform = `translateX(${flyOutX}px) rotate(${rotation}deg)`;
+            
+            cardToAnimate.style.opacity = '0';
+            cardToAnimate.style.transform = `translateX(${flyOutX}px) rotate(${rotation}deg)`;
 
             handleVote(photoId, voteType);
             
             setTimeout(() => {
-                if(currentCard) currentCard.remove();
-                votedPhotoIds.add(photoId);
                 photos.shift();
+                cardToAnimate.remove();
                 renderCards();
             }, 500);
         }
 
         async function handleVote(photoId, voteType) {
+             if (isMemeMode) {
+                 console.log(`Meme vote: ${photoId} - ${voteType}`);
+                 return; // Don't save meme votes to Firestore
+             }
              if (!currentUser) return;
              try {
                 await runTransaction(db, async (transaction) => {
@@ -631,6 +669,17 @@
             }
         });
 
+        // --- Meme Mode ---
+        function startMemeMode() {
+            isMemeMode = true;
+            photos = memeData.map((url, index) => ({
+                id: `meme_${index}_${Math.random()}`, // Zufällige ID für wiederholtes Spielen
+                url: url
+            })).sort(() => Math.random() - 0.5); // Mischen
+            
+            renderCards();
+        }
+
         // --- Modal & Button Listeners ---
         function setupModal(modalId, buttonId) {
             document.getElementById(buttonId).addEventListener('click', async () => {
@@ -647,6 +696,7 @@
         setupModal('admin-modal', 'admin-btn');
         likeBtn.addEventListener('click', () => swipe('right'));
         nopeBtn.addEventListener('click', () => swipe('left'));
+        memeModeBtn.addEventListener('click', startMemeMode);
 
         async function updateRankings() {
             // --- Image Rankings (In-memory sort) ---
